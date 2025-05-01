@@ -1,0 +1,611 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>HTML5云电脑</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #222;
+            color: white;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        
+        .header {
+            background-color: #333;
+            padding: 10px 20px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .connection-status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+        
+        .status-indicator {
+            width: 12px;
+            height: 12px;
+            border-radius: 50%;
+            background-color: #ccc;
+        }
+        
+        .status-indicator.connected {
+            background-color: #4CAF50;
+        }
+        
+        .status-indicator.disconnected {
+            background-color: #f44336;
+        }
+        
+        .status-indicator.connecting {
+            background-color: #FFC107;
+            animation: pulse 1.5s infinite;
+        }
+        
+        @keyframes pulse {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+        
+        .control-buttons {
+            display: flex;
+            gap: 10px;
+        }
+        
+        button {
+            padding: 5px 15px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            background-color: #4CAF50;
+            color: white;
+        }
+        
+        button:hover {
+            opacity: 0.9;
+        }
+        
+        button:disabled {
+            background-color: #666;
+            cursor: not-allowed;
+        }
+        
+        .disconnect-btn {
+            background-color: #f44336;
+        }
+        
+        .settings-btn {
+            background-color: #2196F3;
+        }
+        
+        .remote-desktop-container {
+            flex: 1;
+            position: relative;
+            overflow: hidden;
+            background-color: black;
+        }
+        
+        #remote-screen {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+        
+        .loading-overlay {
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.7);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 10;
+        }
+        
+        .loading-spinner {
+            border: 5px solid #f3f3f3;
+            border-top: 5px solid #3498db;
+            border-radius: 50%;
+            width: 50px;
+            height: 50px;
+            animation: spin 1s linear infinite;
+            margin-bottom: 20px;
+        }
+        
+        @keyframes spin {
+            0% { transform: rotate(0deg); }
+            100% { transform: rotate(360deg); }
+        }
+        
+        .settings-modal {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: none;
+            justify-content: center;
+            align-items: center;
+            z-index: 100;
+        }
+        
+        .settings-content {
+            background-color: #333;
+            padding: 20px;
+            border-radius: 8px;
+            width: 400px;
+            max-width: 90%;
+        }
+        
+        .settings-row {
+            margin-bottom: 15px;
+        }
+        
+        .settings-row label {
+            display: block;
+            margin-bottom: 5px;
+        }
+        
+        .settings-row input, .settings-row select {
+            width: 100%;
+            padding: 8px;
+            border-radius: 4px;
+            border: 1px solid #555;
+            background-color: #444;
+            color: white;
+        }
+        
+        .settings-footer {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        
+        .keyboard-toggle {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            z-index: 5;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            border: none;
+            padding: 5px 10px;
+            border-radius: 4px;
+        }
+        
+        .virtual-keyboard {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            background-color: #333;
+            padding: 10px;
+            display: none;
+            flex-wrap: wrap;
+            gap: 5px;
+            z-index: 20;
+        }
+        
+        .keyboard-key {
+            min-width: 30px;
+            height: 40px;
+            background-color: #555;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+        }
+        
+        .keyboard-key:hover {
+            background-color: #666;
+        }
+        
+        .keyboard-key.space {
+            width: 200px;
+        }
+        
+        .keyboard-key.enter {
+            width: 80px;
+        }
+        
+        .keyboard-key.shift {
+            width: 70px;
+        }
+        
+        .keyboard-key.caps {
+            width: 60px;
+        }
+        
+        .keyboard-key.tab {
+            width: 50px;
+        }
+        
+        .keyboard-key.ctrl, .keyboard-key.alt {
+            width: 40px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <div class="connection-status">
+            <div id="status-indicator" class="status-indicator"></div>
+            <span id="status-text">未连接</span>
+        </div>
+        <div class="control-buttons">
+            <button id="connect-btn" onclick="connect()">连接</button>
+            <button id="disconnect-btn" class="disconnect-btn" onclick="disconnect()" disabled>断开</button>
+            <button id="settings-btn" class="settings-btn" onclick="showSettings()">设置</button>
+        </div>
+    </div>
+    
+    <div class="remote-desktop-container">
+        <div id="loading-overlay" class="loading-overlay">
+            <div class="loading-spinner"></div>
+            <div id="loading-text">正在连接到云电脑...</div>
+        </div>
+        
+        <!-- 这里将显示远程桌面 -->
+        <canvas id="remote-screen"></canvas>
+        
+        <button id="keyboard-toggle" class="keyboard-toggle" onclick="toggleKeyboard()">显示键盘</button>
+    </div>
+    
+    <div id="virtual-keyboard" class="virtual-keyboard">
+        <!-- 虚拟键盘将通过JavaScript动态生成 -->
+    </div>
+    
+    <div id="settings-modal" class="settings-modal">
+        <div class="settings-content">
+            <h2>连接设置</h2>
+            <div class="settings-row">
+                <label for="server-url">服务器地址</label>
+                <input type="text" id="server-url" placeholder="ws://your-server.com:8080">
+            </div>
+            <div class="settings-row">
+                <label for="username">用户名</label>
+                <input type="text" id="username" placeholder="用户名">
+            </div>
+            <div class="settings-row">
+                <label for="password">密码</label>
+                <input type="password" id="password" placeholder="密码">
+            </div>
+            <div class="settings-row">
+                <label for="protocol">协议</label>
+                <select id="protocol">
+                    <option value="vnc">VNC</option>
+                    <option value="rdp">RDP</option>
+                    <option value="ssh">SSH</option>
+                </select>
+            </div>
+            <div class="settings-row">
+                <label for="screen-size">屏幕分辨率</label>
+                <select id="screen-size">
+                    <option value="1024x768">1024x768</option>
+                    <option value="1280x720">1280x720 (HD)</option>
+                    <option value="1366x768">1366x768</option>
+                    <option value="1920x1080" selected>1920x1080 (Full HD)</option>
+                    <option value="2560x1440">2560x1440 (2K)</option>
+                    <option value="3840x2160">3840x2160 (4K)</option>
+                    <option value="custom">自定义</option>
+                </select>
+            </div>
+            <div class="settings-footer">
+                <button onclick="hideSettings()">取消</button>
+                <button onclick="saveSettings()">保存</button>
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // 连接状态
+        let connection = null;
+        let connected = false;
+        
+        // DOM元素
+        const statusIndicator = document.getElementById('status-indicator');
+        const statusText = document.getElementById('status-text');
+        const connectBtn = document.getElementById('connect-btn');
+        const disconnectBtn = document.getElementById('disconnect-btn');
+        const loadingOverlay = document.getElementById('loading-overlay');
+        const loadingText = document.getElementById('loading-text');
+        const remoteScreen = document.getElementById('remote-screen');
+        const settingsModal = document.getElementById('settings-modal');
+        const virtualKeyboard = document.getElementById('virtual-keyboard');
+        const keyboardToggle = document.getElementById('keyboard-toggle');
+        
+        // 初始化设置
+        let settings = {
+            serverUrl: localStorage.getItem('serverUrl') || 'ws://localhost:8080',
+            username: localStorage.getItem('username') || '',
+            password: localStorage.getItem('password') || '',
+            protocol: localStorage.getItem('protocol') || 'vnc',
+            screenSize: localStorage.getItem('screenSize') || '1920x1080'
+        };
+        
+        // 初始化页面
+        function init() {
+            updateStatus('disconnected');
+            document.getElementById('server-url').value = settings.serverUrl;
+            document.getElementById('username').value = settings.username;
+            document.getElementById('password').value = settings.password;
+            document.getElementById('protocol').value = settings.protocol;
+            document.getElementById('screen-size').value = settings.screenSize;
+            
+            // 设置canvas尺寸
+            resizeCanvas();
+            window.addEventListener('resize', resizeCanvas);
+            
+            // 初始化虚拟键盘
+            initVirtualKeyboard();
+        }
+        
+        // 调整canvas尺寸
+        function resizeCanvas() {
+            const container = document.querySelector('.remote-desktop-container');
+            remoteScreen.width = container.clientWidth;
+            remoteScreen.height = container.clientHeight;
+            
+            if (connected) {
+                // 如果已连接，通知服务器调整分辨率
+                sendResizeMessage();
+            }
+        }
+        
+        // 更新连接状态
+        function updateStatus(status) {
+            statusIndicator.className = 'status-indicator ' + status;
+            
+            switch(status) {
+                case 'connected':
+                    statusText.textContent = '已连接';
+                    connectBtn.disabled = true;
+                    disconnectBtn.disabled = false;
+                    loadingOverlay.style.display = 'none';
+                    connected = true;
+                    break;
+                case 'disconnected':
+                    statusText.textContent = '未连接';
+                    connectBtn.disabled = false;
+                    disconnectBtn.disabled = true;
+                    loadingOverlay.style.display = 'none';
+                    connected = false;
+                    break;
+                case 'connecting':
+                    statusText.textContent = '连接中...';
+                    connectBtn.disabled = true;
+                    disconnectBtn.disabled = true;
+                    loadingOverlay.style.display = 'flex';
+                    connected = false;
+                    break;
+                case 'error':
+                    statusText.textContent = '连接错误';
+                    connectBtn.disabled = false;
+                    disconnectBtn.disabled = true;
+                    loadingOverlay.style.display = 'none';
+                    connected = false;
+                    break;
+            }
+        }
+        
+        // 连接到远程桌面
+        function connect() {
+            updateStatus('connecting');
+            loadingText.textContent = '正在连接到云电脑...';
+            
+            // 这里应该是实际的WebSocket连接代码
+            // 以下是模拟连接过程
+            setTimeout(() => {
+                // 模拟连接成功
+                updateStatus('connected');
+                
+                // 模拟远程桌面渲染
+                simulateRemoteDesktop();
+                
+                // 实际实现中，这里应该创建WebSocket连接并处理远程桌面协议
+                // connection = new WebSocket(settings.serverUrl);
+                // connection.onopen = onConnectionOpen;
+                // connection.onmessage = onConnectionMessage;
+                // connection.onclose = onConnectionClose;
+                // connection.onerror = onConnectionError;
+            }, 2000);
+        }
+        
+        // 断开连接
+        function disconnect() {
+            if (connection) {
+                // connection.close();
+                connection = null;
+            }
+            
+            updateStatus('disconnected');
+            
+            // 清除远程屏幕
+            const ctx = remoteScreen.getContext('2d');
+            ctx.clearRect(0, 0, remoteScreen.width, remoteScreen.height);
+        }
+        
+        // 模拟远程桌面（仅供演示）
+        function simulateRemoteDesktop() {
+            const ctx = remoteScreen.getContext('2d');
+            
+            // 绘制桌面背景
+            ctx.fillStyle = '#0078d7';
+            ctx.fillRect(0, 0, remoteScreen.width, remoteScreen.height);
+            
+            // 绘制任务栏
+            ctx.fillStyle = '#333333';
+            ctx.fillRect(0, remoteScreen.height - 40, remoteScreen.width, 40);
+            
+            // 绘制开始按钮
+            ctx.fillStyle = '#4CAF50';
+            ctx.fillRect(10, remoteScreen.height - 35, 80, 30);
+            ctx.fillStyle = 'white';
+            ctx.font = '14px Arial';
+            ctx.fillText('开始', 30, remoteScreen.height - 15);
+            
+            // 绘制时间
+            const time = new Date().toLocaleTimeString();
+            ctx.fillText(time, remoteScreen.width - 100, remoteScreen.height - 15);
+            
+            // 绘制一个窗口
+            ctx.fillStyle = 'white';
+            ctx.fillRect(100, 100, 400, 300);
+            ctx.fillStyle = '#333333';
+            ctx.fillRect(100, 100, 400, 25);
+            ctx.fillStyle = 'white';
+            ctx.font = '12px Arial';
+            ctx.fillText('远程桌面 - 示例窗口', 110, 120);
+            
+            // 绘制窗口内容
+            ctx.fillStyle = 'black';
+            ctx.font = '16px Arial';
+            ctx.fillText('hi', 120, 150);
+            ctx.fillText('如果你看到了这段文字，说明连接成功了', 120, 180);
+            ctx.fillText('还没有搭载操作系统', 120, 210);
+            
+            // 更新模拟时间
+            setInterval(() => {
+                ctx.fillStyle = '#333333';
+                ctx.fillRect(remoteScreen.width - 100, remoteScreen.height - 35, 90, 30);
+                ctx.fillStyle = 'white';
+                const time = new Date().toLocaleTimeString();
+                ctx.fillText(time, remoteScreen.width - 90, remoteScreen.height - 15);
+            }, 1000);
+        }
+        
+        // 显示设置对话框
+        function showSettings() {
+            settingsModal.style.display = 'flex';
+        }
+        
+        // 隐藏设置对话框
+        function hideSettings() {
+            settingsModal.style.display = 'none';
+        }
+        
+        // 保存设置
+        function saveSettings() {
+            settings.serverUrl = document.getElementById('server-url').value;
+            settings.username = document.getElementById('username').value;
+            settings.password = document.getElementById('password').value;
+            settings.protocol = document.getElementById('protocol').value;
+            settings.screenSize = document.getElementById('screen-size').value;
+            
+            // 保存到本地存储
+            localStorage.setItem('serverUrl', settings.serverUrl);
+            localStorage.setItem('username', settings.username);
+            localStorage.setItem('password', settings.password);
+            localStorage.setItem('protocol', settings.protocol);
+            localStorage.setItem('screenSize', settings.screenSize);
+            
+            hideSettings();
+        }
+        
+        // 发送分辨率调整消息
+        function sendResizeMessage() {
+            if (connection && connection.readyState === WebSocket.OPEN) {
+                const width = remoteScreen.width;
+                const height = remoteScreen.height;
+                const message = JSON.stringify({
+                    type: 'resize',
+                    width: width,
+                    height: height
+                });
+                connection.send(message);
+            }
+        }
+        
+        // 初始化虚拟键盘
+        function initVirtualKeyboard() {
+            const keyboardLayout = [
+                ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0', '-', '=', 'Backspace'],
+                ['Tab', 'q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p', '[', ']', '\\'],
+                ['Caps', 'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', ';', '\'', 'Enter'],
+                ['Shift', 'z', 'x', 'c', 'v', 'b', 'n', 'm', ',', '.', '/', 'Shift'],
+                ['Ctrl', 'Alt', ' ', 'Alt', 'Ctrl']
+            ];
+            
+            virtualKeyboard.innerHTML = '';
+            
+            keyboardLayout.forEach(row => {
+                row.forEach(key => {
+                    const keyElement = document.createElement('button');
+                    keyElement.className = 'keyboard-key';
+                    keyElement.textContent = key;
+                    
+                    // 特殊键的样式
+                    if (key === 'Backspace') keyElement.className += ' backspace';
+                    if (key === 'Tab') keyElement.className += ' tab';
+                    if (key === 'Caps') keyElement.className += ' caps';
+                    if (key === 'Enter') keyElement.className += ' enter';
+                    if (key === 'Shift') keyElement.className += ' shift';
+                    if (key === 'Ctrl') keyElement.className += ' ctrl';
+                    if (key === 'Alt') keyElement.className += ' alt';
+                    if (key === ' ') {
+                        keyElement.className += ' space';
+                        keyElement.innerHTML = '&nbsp;';
+                    }
+                    
+                    keyElement.addEventListener('click', () => handleKeyPress(key));
+                    virtualKeyboard.appendChild(keyElement);
+                });
+                virtualKeyboard.appendChild(document.createElement('br'));
+            });
+        }
+        
+        // 处理键盘按键
+        function handleKeyPress(key) {
+            if (!connected) return;
+            
+            // 这里应该发送按键到远程服务器
+            // 实际实现中，需要根据协议发送正确的按键码
+            
+            console.log('按键:', key);
+            
+            // 模拟按键效果
+            if (key === 'Backspace') {
+                // 发送退格键
+            } else if (key === 'Enter') {
+                // 发送回车键
+            } else if (key.length === 1) {
+                // 发送普通字符
+            }
+        }
+        
+        // 切换虚拟键盘显示
+        function toggleKeyboard() {
+            if (virtualKeyboard.style.display === 'flex') {
+                virtualKeyboard.style.display = 'none';
+                keyboardToggle.textContent = '显示键盘';
+            } else {
+                virtualKeyboard.style.display = 'flex';
+                keyboardToggle.textContent = '隐藏键盘';
+            }
+        }
+        
+        // 页面加载完成后初始化
+        window.onload = init;
+    </script>
+</body>
+</html>
